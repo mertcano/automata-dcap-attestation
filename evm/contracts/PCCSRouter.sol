@@ -240,11 +240,23 @@ contract PCCSRouter is IPCCSRouter, Ownable {
         hash = _getPcsHash(ca, true, block.timestamp);
     }
 
-    function getCertHashWithTimestamp(CA ca, uint64 timestamp) external view override returns (bytes32 hash) {
+    function getCertHashWithTimestamp(CA ca, uint64 timestamp)
+        external
+        view
+        override
+        onlyAuthorized
+        returns (bytes32 hash)
+    {
         hash = _getPcsHash(ca, false, timestamp);
     }
 
-    function getCrlHashWithTimestamp(CA ca, uint64 timestamp) external view override returns (bytes32 hash) {
+    function getCrlHashWithTimestamp(CA ca, uint64 timestamp)
+        external
+        view
+        override
+        onlyAuthorized
+        returns (bytes32 hash)
+    {
         hash = _getPcsHash(ca, true, timestamp);
     }
 
@@ -312,7 +324,7 @@ contract PCCSRouter is IPCCSRouter, Ownable {
         require(success, "Failed to determine collateral validity");
         if (ret.length > 0) {
             (uint64 issuedAt, uint64 expiredAt) = abi.decode(ret, (uint64, uint64));
-            valid = timestamp >= issuedAt || timestamp <= expiredAt;
+            valid = timestamp >= issuedAt && timestamp <= expiredAt;
         }
     }
 }

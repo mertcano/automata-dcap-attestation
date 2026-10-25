@@ -72,6 +72,10 @@ abstract contract X509ChainBase is P256Verifier {
         bool verified;
         bool certChainCanBeTrusted;
         for (uint256 i = 0; i < PCK_CERT_CHAIN_LENGTH; i++) {
+            // The verification state must be reset for every certificate, otherwise a stale
+            // `true` from a previous iteration would let an unverified certificate pass
+            verified = false;
+            certRevoked = false;
             X509CertObj memory current = certs[i];
             X509CertObj memory issuer;
             bytes memory crl;
@@ -120,9 +124,21 @@ abstract contract X509ChainBase is P256Verifier {
 
             {
                 bytes memory currentAuthorityKeyIdentifier = current.authorityKeyIdentifier;
-                if (BytesUtils.compareBytes(issuerSubjectKeyIdentifier, currentAuthorityKeyIdentifier)) {
-                    verified = ecdsaVerify(sha256(current.tbs), current.signature, issuer.subjectPublicKey);
+                // The authority key identifier of a certificate must match the subject key identifier
+                // of the certificate that issued it. A mismatch means that the certificate does not
+                // belong to this chain, so the chain has to be rejected instead of silently skipping
+                // the signature verification below.
+                if (!BytesUtils.compareBytes(issuerSubjectKeyIdentifier, currentAuthorityKeyIdentifier)) {
+                    // The root CA is trusted through its public key hash (see ROOTCA_PUBKEY_HASH)
+                    // rather than through a chain of key identifiers, so a missing authority key
+                    // identifier is tolerated for the self-signed root only.
+                    bool isRootWithoutAuthorityKeyIdentifier =
+                        i == PCK_CERT_CHAIN_LENGTH - 1 && currentAuthorityKeyIdentifier.length == 0;
+                    if (!isRootWithoutAuthorityKeyIdentifier) {
+                        return false;
+                    }
                 }
+                verified = ecdsaVerify(sha256(current.tbs), current.signature, issuer.subjectPublicKey);
                 if (!verified) {
                     break;
                 }
